@@ -38,6 +38,11 @@ async function main() {
     await verify(await modelPortfolioManager.getAddress(), []);
     await verify(await investorPortfolioManager.getAddress(), [await modelPortfolioManager.getAddress()]);
   }
+
+  // Transfer ownership of fund tokens to InvestorPortfolioManager
+  await usdcToken.transferOwnership(await investorPortfolioManager.getAddress());
+  await realEstateToken.transferOwnership(await investorPortfolioManager.getAddress());
+  await privateEquityToken.transferOwnership(await investorPortfolioManager.getAddress());
 }
 
 async function verify(contractAddress: string, args: any[]) {

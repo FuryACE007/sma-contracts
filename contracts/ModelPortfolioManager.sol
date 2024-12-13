@@ -24,7 +24,7 @@ contract ModelPortfolioManager is Ownable {
     mapping(uint256 => FundAllocation[]) private _modelPortfolios;
 
     // Counter for creating unique model portfolio IDs
-    uint256 private _portfolioIdCounter;
+    uint256 private _portfolioIdCounter = 1;
 
     // Events for portfolio management
     event ModelPortfolioCreated(uint256 indexed portfolioId);
@@ -108,7 +108,7 @@ contract ModelPortfolioManager is Ownable {
 
         emit ModelPortfolioUpdated(portfolioId);
 
-        // Trigger rebalancing for linked manager
+        // Trigger rebalancing for the linked manager
         if (linkedManagers[msg.sender]) {
             IInvestorPortfolioManager(msg.sender).rebalancePortfolio(msg.sender);
         }

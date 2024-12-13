@@ -146,7 +146,7 @@ contract InvestorPortfolioManager is Ownable {
     }
 
     // Make rebalancing public but restricted to linked model managers
-    function rebalancePortfolio(address investor) public {
+    function rebalancePortfolio(address investor) external {
         require(msg.sender == address(modelPortfolioManager), "Unauthorized");
         _rebalancePortfolio(investor);
     }
