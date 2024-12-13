@@ -4,6 +4,11 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./FundToken.sol";
 
+// Move interface outside the contract
+interface IInvestorPortfolioManager {
+    function rebalancePortfolio(address investor) external;
+}
+
 /**
  * @title ModelPortfolioManager
  * @dev Manages model portfolios with predefined fund allocations
@@ -24,6 +29,9 @@ contract ModelPortfolioManager is Ownable {
     // Events for portfolio management
     event ModelPortfolioCreated(uint256 indexed portfolioId);
     event ModelPortfolioUpdated(uint256 indexed portfolioId);
+
+    // Add mapping to track linked investor managers
+    mapping(address => bool) public linkedManagers;
 
     constructor() Ownable(msg.sender) {}
 
@@ -99,6 +107,11 @@ contract ModelPortfolioManager is Ownable {
         );
 
         emit ModelPortfolioUpdated(portfolioId);
+
+        // Trigger rebalancing for linked manager
+        if (linkedManagers[msg.sender]) {
+            IInvestorPortfolioManager(msg.sender).rebalancePortfolio(msg.sender);
+        }
     }
 
     /**
@@ -110,5 +123,10 @@ contract ModelPortfolioManager is Ownable {
         uint256 portfolioId
     ) public view returns (FundAllocation[] memory) {
         return _modelPortfolios[portfolioId];
+    }
+
+    // Add function to link investor manager
+    function linkInvestorManager(address managerAddress) public onlyOwner {
+        linkedManagers[managerAddress] = true;
     }
 }

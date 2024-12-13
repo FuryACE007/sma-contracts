@@ -22,6 +22,7 @@ contract InvestorPortfolioManager is Ownable {
     event PortfolioAssigned(address indexed investor, uint256 modelPortfolioId);
     event FundsDeposited(address indexed investor, uint256 amount);
     event PortfolioRebalanced(address indexed investor);
+    event FundsWithdrawn(address indexed investor, uint256 amount);
 
     constructor(address _modelPortfolioManagerAddress) Ownable(msg.sender) {
         modelPortfolioManager = ModelPortfolioManager(
@@ -103,16 +104,50 @@ contract InvestorPortfolioManager is Ownable {
     }
 
     /**
-     * @dev Allow investor to withdraw funds
-     * @param fundTokenAddress Address of the fund token to withdraw
-     * @param amount Amount to withdraw
+     * @dev Allow investor to withdraw funds in stablecoin
+     * @param amount Amount of stablecoin to withdraw
      */
-    function withdraw(address fundTokenAddress, uint256 amount) public {
+    function withdraw(uint256 amount) public {
         InvestorPortfolio storage portfolio = _investorPortfolios[msg.sender];
         require(portfolio.modelPortfolioId != 0, "No portfolio assigned");
+        
+        // Get total portfolio value in stablecoin
+        uint256 totalValue = IERC20(portfolio.primaryStablecoin).balanceOf(address(this));
+        require(amount <= totalValue, "Insufficient balance");
 
-        // Perform withdrawal and rebalance
-        FundToken(fundTokenAddress).transfer(msg.sender, amount);
+        // Get current allocations
+        ModelPortfolioManager.FundAllocation[] memory allocations = 
+            modelPortfolioManager.getModelPortfolio(portfolio.modelPortfolioId);
+
+        // Burn proportional amount of fund tokens
+        for (uint i = 0; i < allocations.length; i++) {
+            address fundTokenAddress = allocations[i].tokenAddress;
+            
+            // Calculate amount of fund tokens to burn
+            uint256 burnAmount = (FundToken(fundTokenAddress).balanceOf(address(this)) * amount) / totalValue;
+            if (burnAmount > 0) {
+                FundToken(fundTokenAddress).burn(address(this), burnAmount);
+            }
+        }
+
+        // Transfer stablecoin to investor
+        IERC20(portfolio.primaryStablecoin).transfer(msg.sender, amount);
+
+        // Rebalance remaining portfolio
         _rebalancePortfolio(msg.sender);
+
+        emit FundsWithdrawn(msg.sender, amount);
+    }
+
+    function getPortfolioValue(address investor) public view returns (uint256) {
+        InvestorPortfolio storage portfolio = _investorPortfolios[investor];
+        require(portfolio.modelPortfolioId != 0, "No portfolio assigned");
+        return IERC20(portfolio.primaryStablecoin).balanceOf(address(this));
+    }
+
+    // Make rebalancing public but restricted to linked model managers
+    function rebalancePortfolio(address investor) public {
+        require(msg.sender == address(modelPortfolioManager), "Unauthorized");
+        _rebalancePortfolio(investor);
     }
 }
