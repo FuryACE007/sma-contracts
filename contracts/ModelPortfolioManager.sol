@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./FundToken.sol";
 
-// Move interface outside the contract
 interface IInvestorPortfolioManager {
     function rebalancePortfolio(address investor) external;
 }
@@ -26,7 +25,6 @@ contract ModelPortfolioManager is Ownable {
     // Counter for creating unique model portfolio IDs
     uint256 private _portfolioIdCounter = 1;
 
-    // Events for portfolio management
     event ModelPortfolioCreated(uint256 indexed portfolioId);
     event ModelPortfolioUpdated(uint256 indexed portfolioId);
 

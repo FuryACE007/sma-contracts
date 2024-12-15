@@ -10,7 +10,7 @@ contract InvestorPortfolioManager is Ownable {
     struct InvestorPortfolio {
         uint256 modelPortfolioId;
         mapping(address => uint256) fundBalances;
-        address primaryStablecoin; // e.g., USDC
+        address primaryStablecoin; // e.g. USDC
     }
 
     // Mapping of investor address to their portfolio

@@ -4,10 +4,6 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-/**
- * @title FundToken
- * @dev Represents a specific asset type in the tokenized portfolio management platform
- */
 contract FundToken is ERC20, Ownable {
     uint8 private immutable _decimals;
     string private _fundDescription;
