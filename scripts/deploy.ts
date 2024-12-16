@@ -22,6 +22,11 @@ async function main() {
   await modelPortfolioManager.waitForDeployment();
   await investorPortfolioManager.waitForDeployment();
 
+  // Link the managers
+  await modelPortfolioManager.linkInvestorManager(
+    await investorPortfolioManager.getAddress()
+  );
+
   // Log contract addresses
   console.log("USDC Token deployed to:", await usdcToken.getAddress());
   console.log("Real Estate Token deployed to:", await realEstateToken.getAddress());
