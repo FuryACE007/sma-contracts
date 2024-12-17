@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 
 async function main() {
+  const [deployer, portfolioManager] = await ethers.getSigners();
+  
   // Deploy contracts
   const FundToken = await ethers.getContractFactory("FundToken");
   const usdcToken = await FundToken.deploy(
@@ -45,19 +47,28 @@ async function main() {
     investorPortfolioManager.waitForDeployment(),
   ]);
 
+  // Mint initial USDC to deployer for testing BEFORE transferring ownership
+  const initialSupply = ethers.parseUnits("1000000", 6); // 1M USDC
+  await usdcToken.mint(deployer.address, initialSupply);
+  console.log("✅ Minted initial USDC supply to deployer");
+
   // Link the managers
   await modelPortfolioManager.linkInvestorManager(
     await investorPortfolioManager.getAddress()
   );
 
-  // Transfer ownerships
-  await usdcToken.transferOwnership(
-    await investorPortfolioManager.getAddress()
-  );
+  // Transfer ownership of manager contracts to portfolio manager (Account #1)
+  await modelPortfolioManager.transferOwnership(portfolioManager.address);
+  await investorPortfolioManager.transferOwnership(portfolioManager.address);
+
+  // Transfer ownership of investment tokens to InvestorPortfolioManager
   await realEstateToken.transferOwnership(
     await investorPortfolioManager.getAddress()
   );
   await privateEquityToken.transferOwnership(
+    await investorPortfolioManager.getAddress()
+  );
+  await usdcToken.transferOwnership(
     await investorPortfolioManager.getAddress()
   );
 
