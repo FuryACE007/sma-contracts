@@ -7,147 +7,119 @@ import "./ModelPortfolioManager.sol";
 import "./FundToken.sol";
 
 contract InvestorPortfolioManager is Ownable {
-    struct InvestorPortfolio {
-        uint256 modelPortfolioId;
-        mapping(address => uint256) fundBalances;
-        address primaryStablecoin; // e.g. USDC
-    }
-
-    // Mapping of investor address to their portfolio
-    mapping(address => InvestorPortfolio) private _investorPortfolios;
-
-    // Reference to ModelPortfolioManager contract
-    ModelPortfolioManager public modelPortfolioManager;
-
-    event PortfolioAssigned(address indexed investor, uint256 modelPortfolioId);
-    event FundsDeposited(address indexed investor, uint256 amount);
-    event PortfolioRebalanced(address indexed investor);
-    event FundsWithdrawn(address indexed investor, uint256 amount);
-
-    constructor(address _modelPortfolioManagerAddress) Ownable(msg.sender) {
-        modelPortfolioManager = ModelPortfolioManager(
-            _modelPortfolioManagerAddress
-        );
-    }
-
-    function assignModelPortfolio(
-        address investor,
-        uint256 modelPortfolioId,
-        address primaryStablecoin
-    ) public onlyOwner {
-        InvestorPortfolio storage portfolio = _investorPortfolios[investor];
-        portfolio.modelPortfolioId = modelPortfolioId;
-        portfolio.primaryStablecoin = primaryStablecoin;
-
-        emit PortfolioAssigned(investor, modelPortfolioId);
-    }
-
-    function deposit(uint256 amount) public {
-        InvestorPortfolio storage portfolio = _investorPortfolios[msg.sender];
-        require(portfolio.modelPortfolioId != 0, "No portfolio assigned");
-
-        // Transfer stablecoin from investor to contract
-        IERC20(portfolio.primaryStablecoin).transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
-
-        // Rebalance portfolio
-        _rebalancePortfolio(msg.sender);
-
-        emit FundsDeposited(msg.sender, amount);
+    struct Portfolio {
+        mapping(address => uint256) tokenBalances;
+        address[] tokens;
+        uint256 modelId;
     }
     
-    function _rebalancePortfolio(address investor) internal {
-        InvestorPortfolio storage portfolio = _investorPortfolios[investor];
+    struct ModelPortfolio {
+        address[] tokens;
+        uint256[] weights;
+    }
+    
+    mapping(address => Portfolio) private portfolios;
+    mapping(uint256 => ModelPortfolio) private modelPortfolios;
+    
+    IERC20 public immutable USDC;
+    uint256 private constant BASIS_POINTS = 10000;
 
-        // Retrieve model portfolio allocations
-        ModelPortfolioManager.FundAllocation[]
-            memory allocations = modelPortfolioManager.getModelPortfolio(
-                portfolio.modelPortfolioId
-            );
+    event PortfolioRebalanced(address indexed investor);
 
-        // Total portfolio value calculation
-        uint256 totalPortfolioValue = IERC20(portfolio.primaryStablecoin)
-            .balanceOf(address(this));
+    ModelPortfolioManager public immutable modelPortfolioManager;
 
-        // Perform rebalancing
-        for (uint i = 0; i < allocations.length; i++) {
-            address fundTokenAddress = allocations[i].tokenAddress;
-            uint256 targetWeight = allocations[i].targetWeight;
+    constructor(address _usdc, address _modelPortfolioManager) Ownable(msg.sender) {
+        USDC = IERC20(_usdc);
+        modelPortfolioManager = ModelPortfolioManager(_modelPortfolioManager);
+    }
 
-            // Calculate target amount based on weight
-            uint256 targetAmount = (totalPortfolioValue * targetWeight) / 10000;
+    function deposit(uint256 usdcAmount) external {
+        // Transfer USDC from investor
+        USDC.transferFrom(msg.sender, address(this), usdcAmount);
+        
+        // Allocate according to model weights
+        Portfolio storage portfolio = portfolios[msg.sender];
+        ModelPortfolio memory model = modelPortfolios[portfolio.modelId];
+        
+        for (uint i = 0; i < model.tokens.length; i++) {
+            address token = model.tokens[i];
+            uint256 allocation = (usdcAmount * model.weights[i]) / BASIS_POINTS;
+            
+            // Transfer fund tokens to investor
+            IERC20(token).transfer(msg.sender, allocation);
+            portfolio.tokenBalances[token] += allocation;
+        }
+    }
 
-            // Current fund balance
-            uint256 currentBalance = FundToken(fundTokenAddress).balanceOf(
-                address(this)
-            );
+    function withdraw(uint256 usdcAmount) external {
+        // First rebalance to ensure proper proportions
+        _rebalancePortfolio(msg.sender);
 
-            if (currentBalance < targetAmount) {
-                // Mint additional tokens
-                FundToken(fundTokenAddress).mint(
-                    address(this),
-                    targetAmount - currentBalance
-                );
-            } else if (currentBalance > targetAmount) {
-                // Burn excess tokens
-                FundToken(fundTokenAddress).burn(
-                    address(this),
-                    currentBalance - targetAmount
-                );
-            }
+        Portfolio storage portfolio = portfolios[msg.sender];
+        uint256 totalValue = getPortfolioValue(msg.sender);
+        require(usdcAmount <= totalValue, "Insufficient balance");
+
+        // Calculate proportion to withdraw
+        uint256 proportion = (usdcAmount * BASIS_POINTS) / totalValue;
+        
+        // Withdraw proportionally from each token
+        for (uint i = 0; i < portfolio.tokens.length; i++) {
+            address token = portfolio.tokens[i];
+            uint256 amount = (portfolio.tokenBalances[token] * proportion) / BASIS_POINTS;
+            
+            // Transfer tokens from investor to contract
+            IERC20(token).transferFrom(msg.sender, address(this), amount);
+            portfolio.tokenBalances[token] -= amount;
         }
 
+        // Return USDC to investor
+        USDC.transfer(msg.sender, usdcAmount);
+    }
+
+    function _rebalancePortfolio(address investor) internal {
+        Portfolio storage portfolio = portfolios[investor];
+        ModelPortfolio memory model = modelPortfolios[portfolio.modelId];
+        uint256 totalValue = getPortfolioValue(investor);
+
+        // Rebalance each token to match model weights
+        for (uint i = 0; i < model.tokens.length; i++) {
+            address token = model.tokens[i];
+            uint256 targetAmount = (totalValue * model.weights[i]) / BASIS_POINTS;
+            uint256 currentAmount = portfolio.tokenBalances[token];
+
+            if (currentAmount < targetAmount) {
+                // Need to buy more tokens
+                uint256 buyAmount = targetAmount - currentAmount;
+                IERC20(token).transfer(investor, buyAmount);
+                portfolio.tokenBalances[token] += buyAmount;
+            } else if (currentAmount > targetAmount) {
+                // Need to sell excess tokens
+                uint256 sellAmount = currentAmount - targetAmount;
+                IERC20(token).transferFrom(investor, address(this), sellAmount);
+                portfolio.tokenBalances[token] -= sellAmount;
+            }
+        }
+        
         emit PortfolioRebalanced(investor);
     }
 
-    /**
-     * @dev Allow investor to withdraw funds in stablecoin
-     * @param amount Amount of stablecoin to withdraw
-     */
-    function withdraw(uint256 amount) public {
-        InvestorPortfolio storage portfolio = _investorPortfolios[msg.sender];
-        require(portfolio.modelPortfolioId != 0, "No portfolio assigned");
-        
-        // Get total portfolio value in stablecoin
-        uint256 totalValue = IERC20(portfolio.primaryStablecoin).balanceOf(address(this));
-        require(amount <= totalValue, "Insufficient balance");
-
-        // Get current allocations
-        ModelPortfolioManager.FundAllocation[] memory allocations = 
-            modelPortfolioManager.getModelPortfolio(portfolio.modelPortfolioId);
-
-        // Burn proportional amount of fund tokens
-        for (uint i = 0; i < allocations.length; i++) {
-            address fundTokenAddress = allocations[i].tokenAddress;
-            
-            // Calculate amount of fund tokens to burn
-            uint256 burnAmount = (FundToken(fundTokenAddress).balanceOf(address(this)) * amount) / totalValue;
-            if (burnAmount > 0) {
-                FundToken(fundTokenAddress).burn(address(this), burnAmount);
-            }
-        }
-
-        // Transfer stablecoin to investor
-        IERC20(portfolio.primaryStablecoin).transfer(msg.sender, amount);
-
-        // Rebalance remaining portfolio
-        _rebalancePortfolio(msg.sender);
-
-        emit FundsWithdrawn(msg.sender, amount);
+    function rebalancePortfolio(address investor) external {
+        require(
+            msg.sender == address(modelPortfolioManager) || msg.sender == owner(),
+            "Unauthorized"
+        );
+        _rebalancePortfolio(investor);
     }
 
     function getPortfolioValue(address investor) public view returns (uint256) {
-        InvestorPortfolio storage portfolio = _investorPortfolios[investor];
-        require(portfolio.modelPortfolioId != 0, "No portfolio assigned");
-        return IERC20(portfolio.primaryStablecoin).balanceOf(address(this));
-    }
-
-    // Make rebalancing public but restricted to linked model managers
-    function rebalancePortfolio(address investor) external {
-        require(msg.sender == address(modelPortfolioManager), "Unauthorized");
-        _rebalancePortfolio(investor);
+        Portfolio storage portfolio = portfolios[investor];
+        uint256 totalValue = 0;
+        
+        for (uint i = 0; i < portfolio.tokens.length; i++) {
+            address token = portfolio.tokens[i];
+            totalValue += portfolio.tokenBalances[token]; // 1:1 price with USD
+        }
+        
+        return totalValue;
     }
 }

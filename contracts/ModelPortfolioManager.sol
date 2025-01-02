@@ -8,47 +8,35 @@ interface IInvestorPortfolioManager {
     function rebalancePortfolio(address investor) external;
 }
 
-/**
- * @title ModelPortfolioManager
- * @dev Manages model portfolios with predefined fund allocations
- */
 contract ModelPortfolioManager is Ownable {
-    // Struct to represent a fund in the portfolio
     struct FundAllocation {
         address tokenAddress;
-        uint256 targetWeight; // Percentage represented in basis points (0-10000)
+        uint256 targetWeight;
     }
 
-    // Mapping of model portfolio ID to its fund allocations
     mapping(uint256 => FundAllocation[]) private _modelPortfolios;
-
-    // Counter for creating unique model portfolio IDs
     uint256 private _portfolioIdCounter = 1;
+    
+    // Track which investors are using each model portfolio
+    mapping(uint256 => address[]) private _portfolioInvestors;
+    
+    // Reference to InvestorPortfolioManager
+    address public immutable investorPortfolioManager;
 
     event ModelPortfolioCreated(uint256 indexed portfolioId);
     event ModelPortfolioUpdated(uint256 indexed portfolioId);
+    event InvestorAssigned(address indexed investor, uint256 indexed portfolioId);
 
-    // Add mapping to track linked investor managers
-    mapping(address => bool) public linkedManagers;
+    constructor(address _investorPortfolioManager) Ownable(msg.sender) {
+        investorPortfolioManager = _investorPortfolioManager;
+    }
 
-    constructor() Ownable(msg.sender) {}
-
-    /**
-     * @dev Create a new model portfolio
-     * @param fundAddresses Array of fund token contract addresses
-     * @param weights Corresponding weights for each fund (in basis points)
-     * @return portfolioId Unique identifier for the created model portfolio
-     */
     function createModelPortfolio(
         address[] memory fundAddresses,
         uint256[] memory weights
     ) public onlyOwner returns (uint256 portfolioId) {
-        // Validate input
-        require(
-            fundAddresses.length == weights.length,
-            "Funds and weights must match"
-        );
-
+        require(fundAddresses.length == weights.length, "Arrays length mismatch");
+        
         uint256 totalWeight;
         for (uint i = 0; i < weights.length; i++) {
             totalWeight += weights[i];
@@ -60,35 +48,24 @@ contract ModelPortfolioManager is Ownable {
             );
         }
 
-        // Ensure total weight is exactly 100% (10000 basis points)
-        require(
-            totalWeight == 10000,
-            "Total weights must equal 10000 basis points"
-        );
+        require(totalWeight == 10000, "Total weights must equal 10000 basis points");
 
-        portfolioId = _portfolioIdCounter;
+        portfolioId = _portfolioIdCounter++;
         emit ModelPortfolioCreated(portfolioId);
-
-        _portfolioIdCounter++;
         return portfolioId;
     }
 
-    /**
-     * @dev Update an existing model portfolio
-     * @param portfolioId ID of the portfolio to update
-     * @param fundAddresses New fund token contract addresses
-     * @param weights New corresponding weights for each fund
-     */
     function updateModelPortfolio(
         uint256 portfolioId,
-        address[] memory fundAddresses,
-        uint256[] memory weights
-    ) public onlyOwner {
-        // Clear existing allocations
-        delete _modelPortfolios[portfolioId];
-
+        address[] calldata fundAddresses,
+        uint256[] calldata weights
+    ) external onlyOwner {
+        require(fundAddresses.length == weights.length, "Arrays length mismatch");
+        
         uint256 totalWeight;
-        for (uint i = 0; i < weights.length; i++) {
+        delete _modelPortfolios[portfolioId];
+        
+        for (uint i = 0; i < fundAddresses.length; i++) {
             totalWeight += weights[i];
             _modelPortfolios[portfolioId].push(
                 FundAllocation({
@@ -97,34 +74,27 @@ contract ModelPortfolioManager is Ownable {
                 })
             );
         }
+        
+        require(totalWeight == 10000, "Total weights must equal 10000 basis points");
 
-        // Ensure total weight is exactly 100% (10000 basis points)
-        require(
-            totalWeight == 10000,
-            "Total weights must equal 10000 basis points"
-        );
-
-        emit ModelPortfolioUpdated(portfolioId);
-
-        // Trigger rebalancing for the linked manager
-        if (linkedManagers[msg.sender]) {
-            IInvestorPortfolioManager(msg.sender).rebalancePortfolio(msg.sender);
+        // Trigger rebalancing for all affected investors
+        address[] storage investors = _portfolioInvestors[portfolioId];
+        for (uint i = 0; i < investors.length; i++) {
+            IInvestorPortfolioManager(investorPortfolioManager).rebalancePortfolio(investors[i]);
         }
+        
+        emit ModelPortfolioUpdated(portfolioId);
     }
 
-    /**
-     * @dev Retrieve fund allocations for a specific model portfolio
-     * @param portfolioId ID of the portfolio
-     * @return Array of fund allocations
-     */
-    function getModelPortfolio(
-        uint256 portfolioId
-    ) public view returns (FundAllocation[] memory) {
+    function assignInvestor(address investor, uint256 portfolioId) external {
+        require(msg.sender == investorPortfolioManager, "Unauthorized");
+        _portfolioInvestors[portfolioId].push(investor);
+        emit InvestorAssigned(investor, portfolioId);
+    }
+
+    function getModelPortfolio(uint256 portfolioId) 
+        public view returns (FundAllocation[] memory) 
+    {
         return _modelPortfolios[portfolioId];
-    }
-
-    // Add function to link investor manager
-    function linkInvestorManager(address managerAddress) public onlyOwner {
-        linkedManagers[managerAddress] = true;
     }
 }

@@ -5,37 +5,17 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract FundToken is ERC20, Ownable {
-    uint8 private immutable _decimals;
-    string private _fundDescription;
+    uint256 public constant INITIAL_SUPPLY = 1_000_000 * 10**18; // 1M tokens
+    uint256 public constant TOKEN_PRICE = 1 * 10**6; // 1 USD (in USDC decimals)
 
-    event FundTokenMinted(address indexed to, uint256 amount);
-    event FundTokenBurned(address indexed from, uint256 amount);
-
-    constructor(
-        string memory name,
-        string memory symbol,
-        uint8 decimalPlaces,
-        string memory fundDescription
-    ) ERC20(name, symbol) Ownable(msg.sender) {
-        _decimals = decimalPlaces;
-        _fundDescription = fundDescription;
+    constructor(string memory name, string memory symbol) 
+        ERC20(name, symbol) 
+        Ownable(msg.sender) 
+    {
+        _mint(msg.sender, INITIAL_SUPPLY);
     }
 
-    function decimals() public view virtual override returns (uint8) {
-        return _decimals;
-    }
-
-    function getFundDescription() public view returns (string memory) {
-        return _fundDescription;
-    }
-
-    function mint(address to, uint256 amount) public onlyOwner {
-        _mint(to, amount);
-        emit FundTokenMinted(to, amount);
-    }
-
-    function burn(address from, uint256 amount) public onlyOwner {
-        _burn(from, amount);
-        emit FundTokenBurned(from, amount);
+    function getTokenPrice() public pure returns (uint256) {
+        return TOKEN_PRICE;
     }
 }
