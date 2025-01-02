@@ -34,20 +34,39 @@ contract InvestorPortfolioManager is Ownable {
     }
 
     function deposit(uint256 usdcAmount) external {
+        require(usdcAmount > 0, "Amount must be greater than 0");
+        
         // Transfer USDC from investor
         USDC.transferFrom(msg.sender, address(this), usdcAmount);
         
-        // Allocate according to model weights
+        // Get investor's portfolio
         Portfolio storage portfolio = portfolios[msg.sender];
-        ModelPortfolio memory model = modelPortfolios[portfolio.modelId];
+        require(portfolio.modelId > 0, "No portfolio assigned");
         
-        for (uint i = 0; i < model.tokens.length; i++) {
-            address token = model.tokens[i];
-            uint256 allocation = (usdcAmount * model.weights[i]) / BASIS_POINTS;
+        // Get model portfolio from ModelPortfolioManager
+        ModelPortfolioManager.FundAllocation[] memory allocations = 
+            modelPortfolioManager.getModelPortfolio(portfolio.modelId);
+        
+        // Allocate according to model weights
+        for (uint i = 0; i < allocations.length; i++) {
+            address token = allocations[i].tokenAddress;
+            uint256 allocation = (usdcAmount * allocations[i].targetWeight) / BASIS_POINTS;
             
             // Transfer fund tokens to investor
             IERC20(token).transfer(msg.sender, allocation);
             portfolio.tokenBalances[token] += allocation;
+            
+            // Add token to portfolio's tokens array if not already present
+            bool tokenExists = false;
+            for (uint j = 0; j < portfolio.tokens.length; j++) {
+                if (portfolio.tokens[j] == token) {
+                    tokenExists = true;
+                    break;
+                }
+            }
+            if (!tokenExists) {
+                portfolio.tokens.push(token);
+            }
         }
     }
 

@@ -83,19 +83,6 @@ async function main() {
     );
   console.log("✅ ModelPortfolioManager updated");
 
-  // Transfer token ownership
-  console.log("\nTransferring token ownership to InvestorPortfolioManager...");
-  await usdcToken.transferOwnership(
-    await investorPortfolioManager.getAddress()
-  );
-  await realEstateToken.transferOwnership(
-    await investorPortfolioManager.getAddress()
-  );
-  await privateEquityToken.transferOwnership(
-    await investorPortfolioManager.getAddress()
-  );
-  console.log("✅ Token ownership transferred");
-
   // Transfer initial USDC to investor for testing
   const investor = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"; // Account #2
   const initialInvestorBalance = ethers.parseUnits("10000", 6); // 10,000 USDC
@@ -109,10 +96,45 @@ async function main() {
     )} USDC to investor`
   );
 
-  // Log balances
+  // Log investor balance
   const investorBalance = await usdcToken.balanceOf(investor);
   console.log(
     `Investor USDC balance: ${ethers.formatUnits(investorBalance, 6)}`
+  );
+
+  // Now transfer remaining tokens to IPM
+  console.log(
+    "\nTransferring token ownership and balances to InvestorPortfolioManager..."
+  );
+  const ipmAddress = await investorPortfolioManager.getAddress();
+  const remainingSupply = initialSupply - initialInvestorBalance;
+
+  // Transfer ownership and remaining tokens to IPM
+  await usdcToken.transfer(ipmAddress, remainingSupply);
+  await usdcToken.transferOwnership(ipmAddress);
+  console.log("✅ USDC tokens and ownership transferred");
+
+  await realEstateToken.transfer(ipmAddress, initialSupply);
+  await realEstateToken.transferOwnership(ipmAddress);
+  console.log("✅ Real Estate tokens and ownership transferred");
+
+  await privateEquityToken.transfer(ipmAddress, initialSupply);
+  await privateEquityToken.transferOwnership(ipmAddress);
+  console.log("✅ Private Equity tokens and ownership transferred");
+
+  // Log IPM balances
+  console.log("\nIPM Token Balances:");
+  console.log(
+    "USDC:",
+    ethers.formatUnits(await usdcToken.balanceOf(ipmAddress), 6)
+  );
+  console.log(
+    "Real Estate:",
+    ethers.formatUnits(await realEstateToken.balanceOf(ipmAddress), 6)
+  );
+  console.log(
+    "Private Equity:",
+    ethers.formatUnits(await privateEquityToken.balanceOf(ipmAddress), 6)
   );
 
   // Save deployment info
