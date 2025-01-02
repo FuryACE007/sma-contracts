@@ -21,7 +21,7 @@ contract ModelPortfolioManager is Ownable {
     mapping(uint256 => address[]) private _portfolioInvestors;
     
     // Reference to InvestorPortfolioManager
-    address public immutable investorPortfolioManager;
+    address public investorPortfolioManager;
 
     event ModelPortfolioCreated(uint256 indexed portfolioId);
     event ModelPortfolioUpdated(uint256 indexed portfolioId);
@@ -84,6 +84,11 @@ contract ModelPortfolioManager is Ownable {
         }
         
         emit ModelPortfolioUpdated(portfolioId);
+    }
+
+    function updateInvestorPortfolioManager(address _investorPortfolioManager) external onlyOwner {
+        require(_investorPortfolioManager != address(0), "Invalid address");
+        investorPortfolioManager = _investorPortfolioManager;
     }
 
     function assignInvestor(address investor, uint256 portfolioId) external {

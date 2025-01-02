@@ -122,4 +122,18 @@ contract InvestorPortfolioManager is Ownable {
         
         return totalValue;
     }
+
+    function assignModelPortfolio(
+        address investor,
+        uint256 portfolioId,
+        address stablecoin
+    ) external onlyOwner {
+        Portfolio storage portfolio = portfolios[investor];
+        portfolio.modelId = portfolioId;
+        portfolio.tokens.push(stablecoin);
+    }
+
+    function getInvestorPortfolio(address investor) public view returns (uint256) {
+        return portfolios[investor].modelId;
+    }
 }

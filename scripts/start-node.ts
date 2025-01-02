@@ -4,75 +4,99 @@ import path from "path";
 
 async function main() {
   const [deployer, portfolioManager] = await ethers.getSigners();
-  
-  // Deploy contracts
+  console.log("Starting local node with:");
+  console.log("- Deployer:", deployer.address); // Account #0
+  console.log("- Portfolio Manager:", portfolioManager.address); // Account #1
+
+  // Deploy Fund Tokens with initial supply
+  const initialSupply = ethers.parseUnits("1000000", 6); // 1M tokens
   const FundToken = await ethers.getContractFactory("FundToken");
-  const usdcToken = await FundToken.deploy(
-    "USDC Token",
-    "USDC",
-    6,
-    "Stablecoin Fund"
-  );
+
+  const usdcToken = await FundToken.deploy("USDC Token", "USDC", initialSupply);
+  await usdcToken.waitForDeployment();
+  console.log("✅ USDC Token deployed to:", await usdcToken.getAddress());
+
   const realEstateToken = await FundToken.deploy(
     "Real Estate Token",
     "REAL",
-    18,
-    "Real Estate Fund"
+    initialSupply
   );
+  await realEstateToken.waitForDeployment();
+  console.log(
+    "✅ Real Estate Token deployed to:",
+    await realEstateToken.getAddress()
+  );
+
   const privateEquityToken = await FundToken.deploy(
     "Private Equity Token",
     "PEQU",
-    18,
-    "Private Equity Fund"
+    initialSupply
+  );
+  await privateEquityToken.waitForDeployment();
+  console.log(
+    "✅ Private Equity Token deployed to:",
+    await privateEquityToken.getAddress()
   );
 
+  // Deploy Model Portfolio Manager with placeholder
   const ModelPortfolioManager = await ethers.getContractFactory(
     "ModelPortfolioManager"
   );
-  const modelPortfolioManager = await ModelPortfolioManager.deploy();
+  const modelPortfolioManager = await ModelPortfolioManager.deploy(
+    ethers.ZeroAddress
+  );
+  await modelPortfolioManager.waitForDeployment();
+  console.log(
+    "✅ Model Portfolio Manager deployed to:",
+    await modelPortfolioManager.getAddress()
+  );
 
+  // Deploy Investor Portfolio Manager
   const InvestorPortfolioManager = await ethers.getContractFactory(
     "InvestorPortfolioManager"
   );
   const investorPortfolioManager = await InvestorPortfolioManager.deploy(
+    await usdcToken.getAddress(),
     await modelPortfolioManager.getAddress()
   );
-
-  // Wait for deployments
-  await Promise.all([
-    usdcToken.waitForDeployment(),
-    realEstateToken.waitForDeployment(),
-    privateEquityToken.waitForDeployment(),
-    modelPortfolioManager.waitForDeployment(),
-    investorPortfolioManager.waitForDeployment(),
-  ]);
-
-  // Mint initial USDC to deployer for testing BEFORE transferring ownership
-  const initialSupply = ethers.parseUnits("1000000", 6); // 1M USDC
-  await usdcToken.mint(deployer.address, initialSupply);
-  console.log("✅ Minted initial USDC supply to deployer");
-
-  // Link the managers
-  await modelPortfolioManager.linkInvestorManager(
+  await investorPortfolioManager.waitForDeployment();
+  console.log(
+    "✅ Investor Portfolio Manager deployed to:",
     await investorPortfolioManager.getAddress()
   );
 
-  // Transfer ownership of manager contracts to portfolio manager (Account #1)
+  // Transfer ownership to Portfolio Manager (Account #1)
+  console.log(
+    "\nTransferring ownership to Portfolio Manager:",
+    portfolioManager.address
+  );
   await modelPortfolioManager.transferOwnership(portfolioManager.address);
   await investorPortfolioManager.transferOwnership(portfolioManager.address);
+  console.log("✅ Contract ownership transferred");
 
-  // Transfer ownership of investment tokens to InvestorPortfolioManager
+  // Update ModelPortfolioManager with IPM address
+  console.log("\nUpdating ModelPortfolioManager with IPM address...");
+  await modelPortfolioManager
+    .connect(portfolioManager)
+    .updateInvestorPortfolioManager(
+      await investorPortfolioManager.getAddress()
+    );
+  console.log("✅ ModelPortfolioManager updated");
+
+  // Transfer token ownership
+  console.log("\nTransferring token ownership to InvestorPortfolioManager...");
+  await usdcToken.transferOwnership(
+    await investorPortfolioManager.getAddress()
+  );
   await realEstateToken.transferOwnership(
     await investorPortfolioManager.getAddress()
   );
   await privateEquityToken.transferOwnership(
     await investorPortfolioManager.getAddress()
   );
-  await usdcToken.transferOwnership(
-    await investorPortfolioManager.getAddress()
-  );
+  console.log("✅ Token ownership transferred");
 
-  // Save contract addresses
+  // Save deployment info
   const deploymentInfo = {
     addresses: {
       usdcToken: await usdcToken.getAddress(),
@@ -81,40 +105,48 @@ async function main() {
       modelPortfolioManager: await modelPortfolioManager.getAddress(),
       investorPortfolioManager: await investorPortfolioManager.getAddress(),
     },
+    accounts: {
+      deployer: deployer.address,
+      manager: portfolioManager.address,
+    },
   };
 
-  // Create deployment info file
-  const deploymentPath = path.join(
+  // Save to backend
+  const backendPath = path.join(
     __dirname,
     "../../sma-backend/src/contracts/deployment.json"
   );
-  fs.writeFileSync(deploymentPath, JSON.stringify(deploymentInfo, null, 2));
+  fs.writeFileSync(backendPath, JSON.stringify(deploymentInfo, null, 2));
+  console.log("✅ Deployment info saved");
 
   // Copy ABIs to backend
+  console.log("Copying ABIs to backend...");
   const abiPath = path.join(__dirname, "../../sma-backend/src/abi");
   if (!fs.existsSync(abiPath)) {
     fs.mkdirSync(abiPath, { recursive: true });
   }
 
-  // Copy each ABI
-  fs.copyFileSync(
-    path.join(__dirname, "../artifacts/contracts/FundToken.sol/FundToken.json"),
-    path.join(abiPath, "FundToken.json")
-  );
-  fs.copyFileSync(
-    path.join(__dirname, "../artifacts/contracts/ModelPortfolioManager.sol/ModelPortfolioManager.json"),
-    path.join(abiPath, "ModelPortfolioManager.json")
-  );
-  fs.copyFileSync(
-    path.join(__dirname, "../artifacts/contracts/InvestorPortfolioManager.sol/InvestorPortfolioManager.json"),
-    path.join(abiPath, "InvestorPortfolioManager.json")
-  );
+  const contracts = [
+    "FundToken",
+    "ModelPortfolioManager",
+    "InvestorPortfolioManager",
+  ];
 
-  console.log("Local node started with deployed contracts:");
-  console.log(deploymentInfo.addresses);
+  for (const contract of contracts) {
+    const sourcePath = path.join(
+      __dirname,
+      `../artifacts/contracts/${contract}.sol/${contract}.json`
+    );
+    const destPath = path.join(abiPath, `${contract}.json`);
+
+    fs.copyFileSync(sourcePath, destPath);
+    console.log(`✅ Copied ${contract} ABI`);
+  }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

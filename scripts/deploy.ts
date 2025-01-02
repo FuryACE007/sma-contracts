@@ -3,51 +3,74 @@ import { ethers, run } from "hardhat";
 async function main() {
   // Deploy Fund Tokens
   const FundToken = await ethers.getContractFactory("FundToken");
-  const usdcToken = await FundToken.deploy("USDC Token", "USDC", 6, "Stablecoin Fund");
-  const realEstateToken = await FundToken.deploy("Real Estate Token", "REAL", 18, "Real Estate Fund");
-  const privateEquityToken = await FundToken.deploy("Private Equity Token", "PEQU", 18, "Private Equity Fund");
+  const usdcToken = await FundToken.deploy("USDC Token", "USDC");
+  const realEstateToken = await FundToken.deploy("Real Estate Token", "REAL");
+  const privateEquityToken = await FundToken.deploy(
+    "Private Equity Token",
+    "PEQU"
+  );
 
-  // Deploy Model Portfolio Manager
-  const ModelPortfolioManager = await ethers.getContractFactory("ModelPortfolioManager");
-  const modelPortfolioManager = await ModelPortfolioManager.deploy();
+  // Deploy Model Portfolio Manager first with placeholder address
+  const ModelPortfolioManager = await ethers.getContractFactory(
+    "ModelPortfolioManager"
+  );
+  const modelPortfolioManager = await ModelPortfolioManager.deploy(
+    ethers.ZeroAddress // Temporary address, will update after IPM deployment
+  );
 
   // Deploy Investor Portfolio Manager
-  const InvestorPortfolioManager = await ethers.getContractFactory("InvestorPortfolioManager");
-  const investorPortfolioManager = await InvestorPortfolioManager.deploy(await modelPortfolioManager.getAddress());
+  const InvestorPortfolioManager = await ethers.getContractFactory(
+    "InvestorPortfolioManager"
+  );
+  const investorPortfolioManager = await InvestorPortfolioManager.deploy(
+    await usdcToken.getAddress(),
+    await modelPortfolioManager.getAddress()
+  );
 
-  // Wait for deployments to complete
-  await usdcToken.waitForDeployment();
-  await realEstateToken.waitForDeployment();
-  await privateEquityToken.waitForDeployment();
-  await modelPortfolioManager.waitForDeployment();
-  await investorPortfolioManager.waitForDeployment();
-
-  // Link the managers
-  await modelPortfolioManager.linkInvestorManager(
+  // Update ModelPortfolioManager with correct IPM address
+  await modelPortfolioManager.transferOwnership(
     await investorPortfolioManager.getAddress()
   );
 
-  // Log contract addresses
-  console.log("USDC Token deployed to:", await usdcToken.getAddress());
-  console.log("Real Estate Token deployed to:", await realEstateToken.getAddress());
-  console.log("Private Equity Token deployed to:", await privateEquityToken.getAddress());
-  console.log("Model Portfolio Manager deployed to:", await modelPortfolioManager.getAddress());
-  console.log("Investor Portfolio Manager deployed to:", await investorPortfolioManager.getAddress());
-
-  // Optional: Verify contracts on Etherscan
-  if (process.env.ETHERSCAN_API_KEY) {
-    console.log("Verifying contracts...");
-    await verify(await usdcToken.getAddress(), ["USDC Token", "USDC", 6, "Stablecoin Fund"]);
-    await verify(await realEstateToken.getAddress(), ["Real Estate Token", "REAL", 18, "Real Estate Fund"]);
-    await verify(await privateEquityToken.getAddress(), ["Private Equity Token", "PEQU", 18, "Private Equity Fund"]);
-    await verify(await modelPortfolioManager.getAddress(), []);
-    await verify(await investorPortfolioManager.getAddress(), [await modelPortfolioManager.getAddress()]);
-  }
+  // Wait for deployments to complete
+  await Promise.all([
+    usdcToken.waitForDeployment(),
+    realEstateToken.waitForDeployment(),
+    privateEquityToken.waitForDeployment(),
+    modelPortfolioManager.waitForDeployment(),
+    investorPortfolioManager.waitForDeployment(),
+  ]);
 
   // Transfer ownership of fund tokens to InvestorPortfolioManager
-  await usdcToken.transferOwnership(await investorPortfolioManager.getAddress());
-  await realEstateToken.transferOwnership(await investorPortfolioManager.getAddress());
-  await privateEquityToken.transferOwnership(await investorPortfolioManager.getAddress());
+  await usdcToken.transferOwnership(
+    await investorPortfolioManager.getAddress()
+  );
+  await realEstateToken.transferOwnership(
+    await investorPortfolioManager.getAddress()
+  );
+  await privateEquityToken.transferOwnership(
+    await investorPortfolioManager.getAddress()
+  );
+
+  // Verify contracts if on a supported network
+  if (process.env.ETHERSCAN_API_KEY) {
+    await verify(await usdcToken.getAddress(), ["USDC Token", "USDC"]);
+    await verify(await realEstateToken.getAddress(), [
+      "Real Estate Token",
+      "REAL",
+    ]);
+    await verify(await privateEquityToken.getAddress(), [
+      "Private Equity Token",
+      "PEQU",
+    ]);
+    await verify(await modelPortfolioManager.getAddress(), [
+      await investorPortfolioManager.getAddress(),
+    ]);
+    await verify(await investorPortfolioManager.getAddress(), [
+      await usdcToken.getAddress(),
+      await modelPortfolioManager.getAddress(),
+    ]);
+  }
 }
 
 async function verify(contractAddress: string, args: any[]) {
@@ -66,4 +89,4 @@ main()
   .catch((error) => {
     console.error(error);
     process.exit(1);
-  }); 
+  });
