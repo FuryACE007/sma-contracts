@@ -96,6 +96,25 @@ async function main() {
   );
   console.log("✅ Token ownership transferred");
 
+  // Transfer initial USDC to investor for testing
+  const investor = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"; // Account #2
+  const initialInvestorBalance = ethers.parseUnits("10000", 6); // 10,000 USDC
+
+  console.log("\nTransferring initial USDC to investor...");
+  await usdcToken.transfer(investor, initialInvestorBalance);
+  console.log(
+    `✅ Transferred ${ethers.formatUnits(
+      initialInvestorBalance,
+      6
+    )} USDC to investor`
+  );
+
+  // Log balances
+  const investorBalance = await usdcToken.balanceOf(investor);
+  console.log(
+    `Investor USDC balance: ${ethers.formatUnits(investorBalance, 6)}`
+  );
+
   // Save deployment info
   const deploymentInfo = {
     addresses: {
