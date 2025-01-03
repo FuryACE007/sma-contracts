@@ -97,22 +97,39 @@ contract InvestorPortfolioManager is Ownable {
 
     function _rebalancePortfolio(address investor) internal {
         Portfolio storage portfolio = portfolios[investor];
-        ModelPortfolio memory model = modelPortfolios[portfolio.modelId];
+        
+        // Get latest model portfolio from MPM
+        ModelPortfolioManager.FundAllocation[] memory modelPortfolio = 
+            modelPortfolioManager.getModelPortfolio(portfolio.modelId);
+        
         uint256 totalValue = getPortfolioValue(investor);
 
-        // Rebalance each token to match model weights
-        for (uint i = 0; i < model.tokens.length; i++) {
-            address token = model.tokens[i];
-            uint256 targetAmount = (totalValue * model.weights[i]) / BASIS_POINTS;
+        // Add any new tokens to portfolio's token list
+        for (uint i = 0; i < modelPortfolio.length; i++) {
+            address token = modelPortfolio[i].tokenAddress;
+            bool exists = false;
+            for (uint j = 0; j < portfolio.tokens.length; j++) {
+                if (portfolio.tokens[j] == token) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                portfolio.tokens.push(token);
+            }
+        }
+
+        // Rebalance each token according to new weights
+        for (uint i = 0; i < modelPortfolio.length; i++) {
+            address token = modelPortfolio[i].tokenAddress;
+            uint256 targetAmount = (totalValue * modelPortfolio[i].targetWeight) / BASIS_POINTS;
             uint256 currentAmount = portfolio.tokenBalances[token];
 
             if (currentAmount < targetAmount) {
-                // Need to buy more tokens
                 uint256 buyAmount = targetAmount - currentAmount;
                 IERC20(token).transfer(investor, buyAmount);
                 portfolio.tokenBalances[token] += buyAmount;
             } else if (currentAmount > targetAmount) {
-                // Need to sell excess tokens
                 uint256 sellAmount = currentAmount - targetAmount;
                 IERC20(token).transferFrom(investor, address(this), sellAmount);
                 portfolio.tokenBalances[token] -= sellAmount;
