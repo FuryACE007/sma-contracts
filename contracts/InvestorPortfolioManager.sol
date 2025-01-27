@@ -52,9 +52,14 @@ contract InvestorPortfolioManager is Ownable {
             address token = allocations[i].tokenAddress;
             uint256 allocation = (usdcAmount * allocations[i].targetWeight) / BASIS_POINTS;
             
-            // Transfer fund tokens to investor
-            IERC20(token).transfer(msg.sender, allocation);
-            portfolio.tokenBalances[token] += allocation;
+            if (token == address(USDC)) {
+                // For USDC, just update the balance
+                portfolio.tokenBalances[token] += allocation;
+            } else {
+                // For other tokens, mint new tokens
+                FundToken(token).mint(msg.sender, allocation);
+                portfolio.tokenBalances[token] += allocation;
+            }
             
             // Add token to portfolio's tokens array if not already present
             bool tokenExists = false;
@@ -86,9 +91,15 @@ contract InvestorPortfolioManager is Ownable {
             address token = portfolio.tokens[i];
             uint256 amount = (portfolio.tokenBalances[token] * proportion) / BASIS_POINTS;
             
-            // Transfer tokens from investor to contract
-            IERC20(token).transferFrom(msg.sender, address(this), amount);
-            portfolio.tokenBalances[token] -= amount;
+            if (token == address(USDC)) {
+                // For USDC, just update the balance
+                portfolio.tokenBalances[token] -= amount;
+            } else {
+                // For other tokens, burn them and mint equivalent USDC
+                FundToken(token).burn(msg.sender, amount);
+                portfolio.tokenBalances[token] -= amount;
+                // No need to mint USDC here as we're transferring from the contract's balance
+            }
         }
 
         // Return USDC to investor
@@ -125,14 +136,25 @@ contract InvestorPortfolioManager is Ownable {
             uint256 targetAmount = (totalValue * modelPortfolio[i].targetWeight) / BASIS_POINTS;
             uint256 currentAmount = portfolio.tokenBalances[token];
 
-            if (currentAmount < targetAmount) {
-                uint256 buyAmount = targetAmount - currentAmount;
-                IERC20(token).transfer(investor, buyAmount);
-                portfolio.tokenBalances[token] += buyAmount;
-            } else if (currentAmount > targetAmount) {
-                uint256 sellAmount = currentAmount - targetAmount;
-                IERC20(token).transferFrom(investor, address(this), sellAmount);
-                portfolio.tokenBalances[token] -= sellAmount;
+            if (token != address(USDC)) {
+                if (currentAmount < targetAmount) {
+                    uint256 mintAmount = targetAmount - currentAmount;
+                    FundToken(token).mint(investor, mintAmount);
+                    portfolio.tokenBalances[token] += mintAmount;
+                } else if (currentAmount > targetAmount) {
+                    uint256 burnAmount = currentAmount - targetAmount;
+                    FundToken(token).burn(investor, burnAmount);
+                    portfolio.tokenBalances[token] -= burnAmount;
+                }
+            } else {
+                // Handle USDC balance adjustments
+                if (currentAmount < targetAmount) {
+                    uint256 addAmount = targetAmount - currentAmount;
+                    portfolio.tokenBalances[token] += addAmount;
+                } else if (currentAmount > targetAmount) {
+                    uint256 removeAmount = currentAmount - targetAmount;
+                    portfolio.tokenBalances[token] -= removeAmount;
+                }
             }
         }
         
