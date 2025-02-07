@@ -41,10 +41,33 @@ contract InvestorPortfolioManager is Ownable {
             modelPortfolioManager.getModelPortfolio(portfolio.modelId);
         
         uint256 totalValue = getPortfolioValue(investor);
-
+    
+        // Find cash allocation from model portfolio
+        uint256 cashWeight = 0;
+        for (uint i = 0; i < modelPortfolio.length; i++) {
+            if (modelPortfolio[i].tokenAddress == address(0)) {
+                cashWeight = modelPortfolio[i].targetWeight;
+                uint256 targetCashAmount = (totalValue * cashWeight) / BASIS_POINTS;
+                
+                if (portfolio.cashBalance != targetCashAmount) {
+                    emit CashBalanceUpdated(
+                        investor,
+                        portfolio.cashBalance > targetCashAmount ? 
+                        portfolio.cashBalance - targetCashAmount : 
+                        targetCashAmount - portfolio.cashBalance,
+                        portfolio.cashBalance < targetCashAmount
+                    );
+                    portfolio.cashBalance = targetCashAmount;
+                }
+                break;
+            }
+        }
+    
         // Add any new tokens to portfolio's token list
         for (uint i = 0; i < modelPortfolio.length; i++) {
             address token = modelPortfolio[i].tokenAddress;
+            if (token == address(0)) continue; // Skip cash allocation
+            
             bool exists = false;
             for (uint j = 0; j < portfolio.tokens.length; j++) {
                 if (portfolio.tokens[j] == token) {
@@ -56,13 +79,15 @@ contract InvestorPortfolioManager is Ownable {
                 portfolio.tokens.push(token);
             }
         }
-
+    
         // Rebalance each token according to new weights
         for (uint i = 0; i < modelPortfolio.length; i++) {
             address token = modelPortfolio[i].tokenAddress;
+            if (token == address(0)) continue; // Skip cash allocation
+            
             uint256 targetAmount = (totalValue * modelPortfolio[i].targetWeight) / BASIS_POINTS;
             uint256 currentAmount = portfolio.tokenBalances[token];
-
+    
             if (currentAmount < targetAmount) {
                 uint256 mintAmount = targetAmount - currentAmount;
                 FundToken(token).mint(investor, mintAmount);
@@ -87,7 +112,7 @@ contract InvestorPortfolioManager is Ownable {
 
     function getPortfolioValue(address investor) public view returns (uint256) {
         Portfolio storage portfolio = portfolios[investor];
-        uint256 totalValue = 0;
+        uint256 totalValue = portfolio.cashBalance; // Include cash in total value
         
         for (uint i = 0; i < portfolio.tokens.length; i++) {
             address token = portfolio.tokens[i];
@@ -120,8 +145,16 @@ contract InvestorPortfolioManager is Ownable {
         ModelPortfolioManager.FundAllocation[] memory allocations = 
             modelPortfolioManager.getModelPortfolio(portfolio.modelId);
         
+        // Find cash allocation from model portfolio
+        uint256 cashWeight = 0;
+        for (uint i = 0; i < allocations.length; i++) {
+            if (allocations[i].tokenAddress == address(0)) {
+                cashWeight = allocations[i].targetWeight;
+                break;
+            }
+        }
+        
         // Calculate and update cash balance
-        uint256 cashWeight = 100; // 1% in basis points
         uint256 cashAmount = (amount * cashWeight) / BASIS_POINTS;
         portfolio.cashBalance += cashAmount;
         
@@ -131,9 +164,10 @@ contract InvestorPortfolioManager is Ownable {
         // Allocate remaining amount to fund tokens
         uint256 remainingAmount = amount - cashAmount;
         for (uint i = 0; i < allocations.length; i++) {
-            if (allocations[i].tokenAddress != address(0)) { // Skip cash allocation
+            if (allocations[i].tokenAddress != address(0)) {
                 address token = allocations[i].tokenAddress;
-                uint256 allocation = (remainingAmount * allocations[i].targetWeight) / (BASIS_POINTS - cashWeight);
+                uint256 allocation = (remainingAmount * allocations[i].targetWeight) / 
+                    (BASIS_POINTS - cashWeight);
                 
                 FundToken(token).mint(msg.sender, allocation);
                 portfolio.tokenBalances[token] += allocation;

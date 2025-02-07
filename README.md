@@ -6,7 +6,7 @@ A blockchain-based platform that enables automated portfolio management through 
 
 ### FundToken.sol
 
-- ERC20 token representing different asset types (USDC, Real Estate, Private Equity)
+- ERC20 token representing different asset types (CASH, Real Estate, Private Equity)
 - Custom decimals support for different asset types
 - Controlled minting/burning for portfolio rebalancing
 - Owner-only operations for fund management
