@@ -11,6 +11,7 @@ contract InvestorPortfolioManager is Ownable {
         mapping(address => uint256) tokenBalances;
         address[] tokens;
         uint256 modelId;
+        uint256 cashBalance;
     }
     
     struct ModelPortfolio {
@@ -21,78 +22,15 @@ contract InvestorPortfolioManager is Ownable {
     mapping(address => Portfolio) private portfolios;
     mapping(uint256 => ModelPortfolio) private modelPortfolios;
     
-    IERC20 public immutable USDC;
     uint256 private constant BASIS_POINTS = 10000;
 
     event PortfolioRebalanced(address indexed investor);
+    event CashBalanceUpdated(address indexed investor, uint256 amount, bool isIncrease);
 
     ModelPortfolioManager public immutable modelPortfolioManager;
 
-    constructor(address _usdc, address _modelPortfolioManager) Ownable(msg.sender) {
-        USDC = IERC20(_usdc);
+    constructor(address _modelPortfolioManager) Ownable(msg.sender) {
         modelPortfolioManager = ModelPortfolioManager(_modelPortfolioManager);
-    }
-
-    function deposit(uint256 usdcAmount) external {
-        require(usdcAmount > 0, "Amount must be greater than 0");
-        
-        // Transfer USDC from investor
-        USDC.transferFrom(msg.sender, address(this), usdcAmount);
-        
-        // Get investor's portfolio
-        Portfolio storage portfolio = portfolios[msg.sender];
-        require(portfolio.modelId > 0, "No portfolio assigned");
-        
-        // Get model portfolio from ModelPortfolioManager
-        ModelPortfolioManager.FundAllocation[] memory allocations = 
-            modelPortfolioManager.getModelPortfolio(portfolio.modelId);
-        
-        // Allocate according to model weights
-        for (uint i = 0; i < allocations.length; i++) {
-            address token = allocations[i].tokenAddress;
-            uint256 allocation = (usdcAmount * allocations[i].targetWeight) / BASIS_POINTS;
-            
-            // Mint tokens for all fund tokens including USDC
-            FundToken(token).mint(msg.sender, allocation);
-            portfolio.tokenBalances[token] += allocation;
-            
-            // Add token to portfolio's tokens array if not already present
-            bool tokenExists = false;
-            for (uint j = 0; j < portfolio.tokens.length; j++) {
-                if (portfolio.tokens[j] == token) {
-                    tokenExists = true;
-                    break;
-                }
-            }
-            if (!tokenExists) {
-                portfolio.tokens.push(token);
-            }
-        }
-    }
-
-    function withdraw(uint256 usdcAmount) external {
-        // First rebalance to ensure proper proportions
-        _rebalancePortfolio(msg.sender);
-
-        Portfolio storage portfolio = portfolios[msg.sender];
-        uint256 totalValue = getPortfolioValue(msg.sender);
-        require(usdcAmount <= totalValue, "Insufficient balance");
-
-        // Calculate proportion to withdraw
-        uint256 proportion = (usdcAmount * BASIS_POINTS) / totalValue;
-        
-        // Withdraw proportionally from each token
-        for (uint i = 0; i < portfolio.tokens.length; i++) {
-            address token = portfolio.tokens[i];
-            uint256 amount = (portfolio.tokenBalances[token] * proportion) / BASIS_POINTS;
-            
-            // Burn tokens for all fund tokens including USDC
-            FundToken(token).burn(msg.sender, amount);
-            portfolio.tokenBalances[token] -= amount;
-        }
-
-        // Return USDC to investor
-        USDC.transfer(msg.sender, usdcAmount);
     }
 
     function _rebalancePortfolio(address investor) internal {
@@ -161,15 +99,84 @@ contract InvestorPortfolioManager is Ownable {
 
     function assignModelPortfolio(
         address investor,
-        uint256 portfolioId,
-        address stablecoin
+        uint256 portfolioId
     ) external onlyOwner {
         Portfolio storage portfolio = portfolios[investor];
         portfolio.modelId = portfolioId;
-        portfolio.tokens.push(stablecoin);
     }
 
     function getInvestorPortfolio(address investor) public view returns (uint256) {
         return portfolios[investor].modelId;
+    }
+    
+    function deposit(uint256 amount) external {
+        require(amount > 0, "Amount must be greater than 0");
+        
+        // Get investor's portfolio
+        Portfolio storage portfolio = portfolios[msg.sender];
+        require(portfolio.modelId > 0, "No portfolio assigned");
+        
+        // Get model portfolio allocations
+        ModelPortfolioManager.FundAllocation[] memory allocations = 
+            modelPortfolioManager.getModelPortfolio(portfolio.modelId);
+        
+        // Calculate and update cash balance
+        uint256 cashWeight = 100; // 1% in basis points
+        uint256 cashAmount = (amount * cashWeight) / BASIS_POINTS;
+        portfolio.cashBalance += cashAmount;
+        
+        // Emit event for backend to update cash balance
+        emit CashBalanceUpdated(msg.sender, cashAmount, true);
+        
+        // Allocate remaining amount to fund tokens
+        uint256 remainingAmount = amount - cashAmount;
+        for (uint i = 0; i < allocations.length; i++) {
+            if (allocations[i].tokenAddress != address(0)) { // Skip cash allocation
+                address token = allocations[i].tokenAddress;
+                uint256 allocation = (remainingAmount * allocations[i].targetWeight) / (BASIS_POINTS - cashWeight);
+                
+                FundToken(token).mint(msg.sender, allocation);
+                portfolio.tokenBalances[token] += allocation;
+                
+                // Add token to portfolio's tokens array if not already present
+                bool tokenExists = false;
+                for (uint j = 0; j < portfolio.tokens.length; j++) {
+                    if (portfolio.tokens[j] == token) {
+                        tokenExists = true;
+                        break;
+                    }
+                }
+                if (!tokenExists) {
+                    portfolio.tokens.push(token);
+                }
+            }
+        }
+    }
+
+    function withdraw(uint256 amount) external {
+        _rebalancePortfolio(msg.sender);
+
+        Portfolio storage portfolio = portfolios[msg.sender];
+        uint256 totalValue = getPortfolioValue(msg.sender);
+        require(amount <= totalValue, "Insufficient balance");
+
+        // Calculate cash proportion
+        uint256 cashAmount = (amount * portfolio.cashBalance) / totalValue;
+        portfolio.cashBalance -= cashAmount;
+        
+        // Emit event for backend to update cash balance
+        emit CashBalanceUpdated(msg.sender, cashAmount, false);
+
+        // Withdraw proportionally from each token
+        uint256 remainingAmount = amount - cashAmount;
+        uint256 remainingValue = totalValue - portfolio.cashBalance;
+        
+        for (uint i = 0; i < portfolio.tokens.length; i++) {
+            address token = portfolio.tokens[i];
+            uint256 tokenAmount = (portfolio.tokenBalances[token] * remainingAmount) / remainingValue;
+            
+            FundToken(token).burn(msg.sender, tokenAmount);
+            portfolio.tokenBalances[token] -= tokenAmount;
+        }
     }
 }

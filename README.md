@@ -36,9 +36,9 @@ A blockchain-based platform that enables automated portfolio management through 
 
 ### Investment Operations
 
-- Deposit stablecoins (e.g., USDC)
+- Deposit funds directly
 - Automatic fund token minting based on portfolio weights
-- Proportional withdrawals back to stablecoin
+- Proportional withdrawals
 - Real-time portfolio rebalancing
 
 ## Setup & Deployment
