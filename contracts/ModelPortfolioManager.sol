@@ -117,4 +117,11 @@ contract ModelPortfolioManager is Ownable {
     {
         return _modelPortfolios[portfolioId];
     }
+    
+    // Add this function to the ModelPortfolioManager contract
+    function getPortfolioInvestors(uint256 portfolioId) 
+        external view returns (address[] memory) 
+    {
+        return _portfolioInvestors[portfolioId];
+    }
 }
