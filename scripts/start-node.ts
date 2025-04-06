@@ -10,32 +10,54 @@ async function main() {
 
   // Deploy Fund Tokens
   const FundToken = await ethers.getContractFactory("FundToken");
-  
+
   const cashToken = await FundToken.deploy("Cash Token", "CASH");
   await cashToken.waitForDeployment();
   console.log("✅ Cash Token deployed to:", await cashToken.getAddress());
 
   const realEstateToken = await FundToken.deploy("Real Estate Token", "REAL");
   await realEstateToken.waitForDeployment();
-  console.log("✅ Real Estate Token deployed to:", await realEstateToken.getAddress());
+  console.log(
+    "✅ Real Estate Token deployed to:",
+    await realEstateToken.getAddress()
+  );
 
-  const privateEquityToken = await FundToken.deploy("Private Equity Token", "PEQU");
+  const privateEquityToken = await FundToken.deploy(
+    "Private Equity Token",
+    "PEQU"
+  );
   await privateEquityToken.waitForDeployment();
-  console.log("✅ Private Equity Token deployed to:", await privateEquityToken.getAddress());
+  console.log(
+    "✅ Private Equity Token deployed to:",
+    await privateEquityToken.getAddress()
+  );
 
   // Deploy Model Portfolio Manager
-  const ModelPortfolioManager = await ethers.getContractFactory("ModelPortfolioManager");
-  const modelPortfolioManager = await ModelPortfolioManager.deploy(ethers.ZeroAddress);
+  const ModelPortfolioManager = await ethers.getContractFactory(
+    "ModelPortfolioManager"
+  );
+
+  const modelPortfolioManager = await ModelPortfolioManager.deploy(
+    await cashToken.getAddress()
+  );
   await modelPortfolioManager.waitForDeployment();
-  console.log("✅ Model Portfolio Manager deployed to:", await modelPortfolioManager.getAddress());
+  console.log(
+    "✅ Model Portfolio Manager deployed to:",
+    await modelPortfolioManager.getAddress()
+  );
 
   // Deploy Investor Portfolio Manager
-  const InvestorPortfolioManager = await ethers.getContractFactory("InvestorPortfolioManager");
+  const InvestorPortfolioManager = await ethers.getContractFactory(
+    "InvestorPortfolioManager"
+  );
   const investorPortfolioManager = await InvestorPortfolioManager.deploy(
     await modelPortfolioManager.getAddress()
   );
   await investorPortfolioManager.waitForDeployment();
-  console.log("✅ Investor Portfolio Manager deployed to:", await investorPortfolioManager.getAddress());
+  console.log(
+    "✅ Investor Portfolio Manager deployed to:",
+    await investorPortfolioManager.getAddress()
+  );
 
   // Transfer ownership to Portfolio Manager (Account #1)
   await modelPortfolioManager.transferOwnership(portfolioManager.address);
@@ -45,7 +67,9 @@ async function main() {
   // Update ModelPortfolioManager with IPM address
   await modelPortfolioManager
     .connect(portfolioManager)
-    .updateInvestorPortfolioManager(await investorPortfolioManager.getAddress());
+    .updateInvestorPortfolioManager(
+      await investorPortfolioManager.getAddress()
+    );
   console.log("✅ ModelPortfolioManager updated");
 
   // Transfer token ownership to IPM

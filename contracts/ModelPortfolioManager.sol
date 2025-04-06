@@ -76,7 +76,7 @@ contract ModelPortfolioManager is Ownable {
         }
         
         require(totalWeight == 10000, "Total weights must equal 10000 basis points");
-
+    
         // Trigger rebalancing for all affected investors
         address[] storage investors = _portfolioInvestors[portfolioId];
         for (uint i = 0; i < investors.length; i++) {
@@ -93,7 +93,22 @@ contract ModelPortfolioManager is Ownable {
 
     function assignInvestor(address investor, uint256 portfolioId) external {
         require(msg.sender == investorPortfolioManager, "Unauthorized");
-        _portfolioInvestors[portfolioId].push(investor);
+        
+        // Check if investor is already in the list to avoid duplicates
+        bool exists = false;
+        address[] storage investors = _portfolioInvestors[portfolioId];
+        for (uint i = 0; i < investors.length; i++) {
+            if (investors[i] == investor) {
+                exists = true;
+                break;
+            }
+        }
+        
+        // Only add if not already in the list
+        if (!exists) {
+            _portfolioInvestors[portfolioId].push(investor);
+        }
+        
         emit InvestorAssigned(investor, portfolioId);
     }
 
