@@ -1,0 +1,14 @@
+{
+  "network": "sepolia",
+  "addresses": {
+    "cashToken": "0x4f6756C93075F11ed21937C43F884Fa23745CF52",
+    "realEstateToken": "0x31153546cC8C146eEbFb59Ec9A15BfF3Edf270c3",
+    "privateEquityToken": "0x1664d6Ccdf201736b32994e7ef4ef1B0385eA8d7",
+    "modelPortfolioManager": "0xB3bA0635e32282e9E76a43A094CFbE827dfdcBC2",
+    "investorPortfolioManager": "0xb944ddF54e79105A3190c4bED6a4B0B260f0fb26"
+  },
+  "accounts": {
+    "deployer": "0xB1e1B36bC62FD6f795e7E059c2E2B152b31657C9",
+    "manager": "0x376505Be19457Ad52497457AdDfF1f04aBE5158e"
+  }
+}

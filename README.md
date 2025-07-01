@@ -55,7 +55,7 @@ Create a `.env` file:
 
 ```bash
 PRIVATE_KEY_2=your_wallet_private_key
-SEPOLIA_RPC_URL=your_sepolia_rpc_url
+BUILD_BEAR_RPC_URL=https://rpc.buildbear.io/your_buildbear_endpoint
 ETHERSCAN_API_KEY=your_etherscan_api_key
 ```
 
@@ -71,39 +71,4 @@ OR
 npx hardhat run scripts/deploy.ts --network hardhat
 ```
 
-## Known Limitations & Future Improvements
 
-### Security
-
-- [ ] Implement emergency pause mechanism
-- [ ] Add withdrawal limits and timeouts
-- [ ] Separate custody from management logic
-- [ ] Add multi-signature requirements for critical operations
-
-### Liquidity Management
-
-- [ ] Implement withdrawal queues
-- [ ] Add liquidity checks before withdrawals
-- [ ] Handle illiquid asset scenarios
-- [ ] Add partial withdrawal functionality
-
-### Portfolio Management
-
-- [ ] Support for more complex rebalancing strategies
-- [ ] Add batch operations for gas efficiency
-- [ ] Implement fee structure
-- [ ] Add portfolio performance tracking
-
-### User Experience
-
-- [ ] Add detailed portfolio value calculations
-- [ ] Implement events for better tracking
-- [ ] Add historical performance data
-- [ ] Support for multiple stablecoins
-
-### Technical Improvements
-
-- [ ] Implement proxy pattern for upgradability
-- [ ] Add comprehensive test coverage
-- [ ] Optimize gas usage in rebalancing
-- [ ] Add formal verification
