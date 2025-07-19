@@ -14,6 +14,11 @@ contract FundToken is ERC20, Ownable {
         _mint(to, amount);
     }
 
+    function decimals() public view virtual override returns (uint8) {
+        return 0;
+    }
+
+
     function burn(address from, uint256 amount) external onlyOwner {
         _burn(from, amount);
     }
