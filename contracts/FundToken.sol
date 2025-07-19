@@ -15,7 +15,7 @@ contract FundToken is ERC20, Ownable {
     }
 
     function decimals() public view virtual override returns (uint8) {
-        return 0;
+        return 6; // Use 6 decimals for whole number token amounts
     }
 
 
